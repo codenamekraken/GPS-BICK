@@ -1,63 +1,84 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GPS Tracker Dashboard</title>
+  <title>🚀 Kukur GPS Tracker</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap" rel="stylesheet">
   <style>
     body {
       margin: 0;
-      font-family: 'Segoe UI', sans-serif;
-      background: #121212;
-      color: #f0f0f0;
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      font-family: 'Orbitron', sans-serif;
+      color: #fff;
     }
     header {
       padding: 1rem;
-      background: #1f1f1f;
+      background: rgba(0,0,0,0.8);
+      font-size: 2rem;
       text-align: center;
-      font-size: 1.5rem;
-      color: #00ffea;
+      color: #00ffc3;
+      letter-spacing: 2px;
+      border-bottom: 1px solid #00ffc3;
     }
-    #map, #gmap {
-      height: 50vh;
+    #map {
+      height: 60vh;
       width: 100%;
+      z-index: 1;
     }
     .stats {
-      padding: 1rem;
-      background: #1e1e1e;
       display: flex;
-      justify-content: space-around;
       flex-wrap: wrap;
-      font-size: 1.1rem;
+      justify-content: space-around;
+      padding: 1rem;
+      background: rgba(0,0,0,0.7);
     }
     .stat {
-      margin: 1rem;
-      padding: 1rem;
-      background: #2e2e2e;
+      background: #1c1c1c;
+      border: 2px solid #00ffc3;
       border-radius: 10px;
+      padding: 1rem;
+      margin: 1rem;
+      min-width: 150px;
+      text-align: center;
+      box-shadow: 0 0 10px #00ffc3;
+    }
+    .speedometer {
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      margin: 1rem auto;
+      background: conic-gradient(#00ffc3 0% var(--value, 0%), #111 0 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
       box-shadow: 0 0 10px #00ffc3;
     }
   </style>
 </head>
 <body>
-  <header>📍 GPS Tracker Dashboard</header>
+  <header>📍 Kukur GPS Dashboard</header>
   <div id="map"></div>
-  <div id="gmap"></div>
+
   <div class="stats">
-    <div class="stat" id="start-point">Start Point: N/A</div>
-    <div class="stat" id="end-point">End Point: N/A</div>
-    <div class="stat" id="top-speed">Top Speed: 0 km/h</div>
-    <div class="stat" id="avg-speed">Average Speed: 0 km/h</div>
-    <div class="stat" id="distance">Distance: 0 km</div>
+    <div class="stat">🏁 Start: <span id="start-point">N/A</span></div>
+    <div class="stat">🛑 End: <span id="end-point">N/A</span></div>
+    <div class="stat">
+      ⚡ Top Speed
+      <div class="speedometer" id="top-speed-dial">0 km/h</div>
+    </div>
+    <div class="stat">
+      📉 Avg Speed
+      <div class="speedometer" id="avg-speed-dial">0 km/h</div>
+    </div>
+    <div class="stat">🛣️ Distance: <span id="distance">0 km</span></div>
   </div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA",
@@ -72,10 +93,12 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref("trackers/device1");
 
-    let map = L.map('map').setView([0, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const map = L.map('map').setView([20, 78], 5);
+    L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      attribution: '&copy; Google Maps - Satellite'
+    }).addTo(map);
 
-    let polyline = L.polyline([], {color: 'cyan'}).addTo(map);
+    let polyline = L.polyline([], {color: '#00ffc3'}).addTo(map);
     let marker = null, startLatLng = null;
     let totalSpeed = 0, topSpeed = 0, totalDistance = 0, points = 0, lastLatLng = null;
 
@@ -83,15 +106,14 @@
       const data = snap.val();
       if (!data || !data.lat || !data.lon) return;
 
-      const lat = data.lat;
-      const lon = data.lon;
+      const lat = data.lat, lon = data.lon;
       const speed = data.speed || 0;
-
       const latlng = [lat, lon];
+
       if (!marker) {
         marker = L.marker(latlng).addTo(map);
         startLatLng = latlng;
-        document.getElementById('start-point').innerText = `Start Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        document.getElementById('start-point').innerText = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
       } else {
         marker.setLatLng(latlng);
       }
@@ -109,10 +131,12 @@
       }
       lastLatLng = latlng;
 
-      document.getElementById('end-point').innerText = `End Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      document.getElementById('top-speed').innerText = `Top Speed: ${topSpeed.toFixed(2)} km/h`;
-      document.getElementById('avg-speed').innerText = `Average Speed: ${(totalSpeed / points).toFixed(2)} km/h`;
-      document.getElementById('distance').innerText = `Distance: ${totalDistance.toFixed(2)} km`;
+      document.getElementById('end-point').innerText = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      document.getElementById('top-speed-dial').style.setProperty('--value', `${Math.min(topSpeed, 100)}%`);
+      document.getElementById('top-speed-dial').innerText = `${topSpeed.toFixed(2)} km/h`;
+      document.getElementById('avg-speed-dial').style.setProperty('--value', `${Math.min(totalSpeed / points, 100)}%`);
+      document.getElementById('avg-speed-dial').innerText = `${(totalSpeed / points).toFixed(2)} km/h`;
+      document.getElementById('distance').innerText = `${totalDistance.toFixed(2)} km`;
     });
   </script>
 </body>
