@@ -1,65 +1,118 @@
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Live GPS Tracker - Firebase + Google Maps + Leaflet</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPS Tracker Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    html, body, #map { height: 100%; margin: 0; padding: 0; }
-    .leaflet-popup-content { font-size: 16px; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #121212;
+      color: #f0f0f0;
+    }
+    header {
+      padding: 1rem;
+      background: #1f1f1f;
+      text-align: center;
+      font-size: 1.5rem;
+      color: #00ffea;
+    }
+    #map, #gmap {
+      height: 50vh;
+      width: 100%;
+    }
+    .stats {
+      padding: 1rem;
+      background: #1e1e1e;
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      font-size: 1.1rem;
+    }
+    .stat {
+      margin: 1rem;
+      padding: 1rem;
+      background: #2e2e2e;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #00ffc3;
+    }
   </style>
 </head>
 <body>
+  <header>📍 GPS Tracker Dashboard</header>
   <div id="map"></div>
+  <div id="gmap"></div>
+  <div class="stats">
+    <div class="stat" id="start-point">Start Point: N/A</div>
+    <div class="stat" id="end-point">End Point: N/A</div>
+    <div class="stat" id="top-speed">Top Speed: 0 km/h</div>
+    <div class="stat" id="avg-speed">Average Speed: 0 km/h</div>
+    <div class="stat" id="distance">Distance: 0 km</div>
+  </div>
 
-  <!-- Leaflet.js -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
-  <!-- Google Maps API (Optional for reverse geocoding or hybrid view) -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
   <script>
-    // Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA",
-      databaseURL: "https://gpstracker-9be3a-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      authDomain: "gpstracker-9be3a.firebaseapp.com",
+      databaseURL: "https://gpstracker-9be3a-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "gpstracker-9be3a",
+      storageBucket: "gpstracker-9be3a.appspot.com",
+      messagingSenderId: "xxx",
+      appId: "xxx"
     };
+
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    const db = firebase.database().ref("trackers/device1");
 
-    // Map Initialization
-    const map = L.map('map').setView([21.2277, 81.3437], 18);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+    let map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    const marker = L.marker([0, 0]).addTo(map);
-    const pathLine = L.polyline([], { color: 'blue' }).addTo(map);
+    let polyline = L.polyline([], {color: 'cyan'}).addTo(map);
+    let marker = null, startLatLng = null;
+    let totalSpeed = 0, topSpeed = 0, totalDistance = 0, points = 0, lastLatLng = null;
 
-    // Realtime Firebase Updates
-    db.ref("/trackers/device1").on("value", (snapshot) => {
-      const data = snapshot.val();
-      if (data && data.lat && data.lon) {
-        const latlng = [data.lat, data.lon];
-        marker.setLatLng(latlng).bindPopup(\`
-          <b>📍 Location</b><br>
-          Lat: \${data.lat.toFixed(6)}<br>
-          Lon: \${data.lon.toFixed(6)}<br>
-          Speed: \${data.speed} km/h<br>
-          Sats: \${data.sats}<br>
-          Dir: \${data.dir}<br>
-          Time: \${new Date(data.ts).toLocaleTimeString()}
-        \`).openPopup();
-        map.setView(latlng);
-        pathLine.addLatLng(latlng);
+    db.on('value', snap => {
+      const data = snap.val();
+      if (!data || !data.lat || !data.lon) return;
+
+      const lat = data.lat;
+      const lon = data.lon;
+      const speed = data.speed || 0;
+
+      const latlng = [lat, lon];
+      if (!marker) {
+        marker = L.marker(latlng).addTo(map);
+        startLatLng = latlng;
+        document.getElementById('start-point').innerText = `Start Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      } else {
+        marker.setLatLng(latlng);
       }
+
+      polyline.addLatLng(latlng);
+      map.setView(latlng, 16);
+
+      totalSpeed += speed;
+      topSpeed = Math.max(topSpeed, speed);
+      points++;
+
+      if (lastLatLng) {
+        const dist = map.distance(lastLatLng, latlng) / 1000;
+        totalDistance += dist;
+      }
+      lastLatLng = latlng;
+
+      document.getElementById('end-point').innerText = `End Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      document.getElementById('top-speed').innerText = `Top Speed: ${topSpeed.toFixed(2)} km/h`;
+      document.getElementById('avg-speed').innerText = `Average Speed: ${(totalSpeed / points).toFixed(2)} km/h`;
+      document.getElementById('distance').innerText = `Distance: ${totalDistance.toFixed(2)} km`;
     });
   </script>
 </body>
