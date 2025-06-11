@@ -6,9 +6,9 @@
   <title>🚗 GPS Tracker Dashboard</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-compass/dist/leaflet-compass.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-compass/dist/leaflet-compass.min.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-compass/dist/leaflet-compass.css" />
   <style>
     :root {
       --bg-color: #121212;
@@ -139,20 +139,29 @@
     <div class="stat" id="distance">Distance: 0 km</div>
   </div>
   <script>
-    let map = L.map('map').setView([20.5937, 78.9629], 5);
-    L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-      maxZoom: 20,
-      subdomains: ['mt0','mt1','mt2','mt3']
+    let map = L.map('map').setView([20.5937, 78.9629], 6);
+
+    // Esri Satellite Layer as a replacement for Google Satellite
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '&copy; Esri, Maxar, Earthstar Geographics',
+      maxZoom: 20
     }).addTo(map);
 
-    const compass = new L.Control.Compass({ autoActive: true, showDigit:true });
+    // Compass
+    const compass = new L.Control.Compass({ autoActive: true, showDigit: true });
     map.addControl(compass);
 
+    // Toggle Light/Dark Mode
     function toggleTheme() {
       const root = document.documentElement;
       const currentTheme = root.getAttribute('data-theme');
       root.setAttribute('data-theme', currentTheme === 'dark' ? 'light' : 'dark');
     }
+
+    // Test marker
+    const marker = L.marker([20.5937, 78.9629]).addTo(map)
+      .bindPopup("India Center")
+      .openPopup();
   </script>
 </body>
 </html>
