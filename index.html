@@ -1,24 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>🚗 GPS Tracker Dashboard</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-compass/dist/leaflet-compass.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-compass/dist/leaflet-compass.css" />
   <style>
+    :root {
+      --bg-color: #121212;
+      --text-color: #f0f0f0;
+      --card-color: #2e2e2e;
+      --highlight: #00ffc3;
+    }
+    [data-theme="light"] {
+      --bg-color: #ffffff;
+      --text-color: #000000;
+      --card-color: #f0f0f0;
+      --highlight: #0077ff;
+    }
     body {
       margin: 0;
       font-family: 'Segoe UI', sans-serif;
-      background: #121212;
-      color: #f0f0f0;
+      background: var(--bg-color);
+      color: var(--text-color);
     }
     header {
       padding: 1rem;
-      background: #1f1f1f;
+      background: var(--card-color);
       text-align: center;
       font-size: 1.5rem;
-      color: #00ffea;
+      color: var(--highlight);
+      position: relative;
     }
     #map {
       height: 50vh;
@@ -27,7 +43,7 @@
     }
     .stats {
       padding: 1rem;
-      background: #1e1e1e;
+      background: var(--card-color);
       display: flex;
       justify-content: space-around;
       flex-wrap: wrap;
@@ -35,9 +51,9 @@
     .stat {
       margin: 1rem;
       padding: 1rem;
-      background: #2e2e2e;
+      background: var(--card-color);
       border-radius: 10px;
-      box-shadow: 0 0 10px #00ffc3;
+      box-shadow: 0 0 10px var(--highlight);
       min-width: 200px;
     }
     .buttons {
@@ -48,8 +64,8 @@
       padding: 0.6rem 1rem;
       margin: 0.3rem;
       border: none;
-      background-color: #00ffc3;
-      color: #121212;
+      background-color: var(--highlight);
+      color: var(--bg-color);
       font-weight: bold;
       border-radius: 6px;
       cursor: pointer;
@@ -64,28 +80,42 @@
       width: 150px;
       height: 150px;
       border-radius: 50%;
-      background: radial-gradient(#111, #222);
-      border: 4px solid #00ffc3;
+      background: radial-gradient(var(--bg-color), var(--card-color));
+      border: 4px solid var(--highlight);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 15px #00ffc3;
+      box-shadow: 0 0 15px var(--highlight);
     }
     .gauge h3 {
       margin: 0;
       font-size: 1rem;
-      color: #ccc;
+      color: var(--text-color);
     }
     .gauge span {
       font-size: 1.5rem;
       font-weight: bold;
-      color: #00ffea;
+      color: var(--highlight);
+    }
+    .toggle-mode {
+      position: absolute;
+      right: 1rem;
+      top: 1rem;
+      background: none;
+      border: 2px solid var(--highlight);
+      border-radius: 6px;
+      color: var(--highlight);
+      padding: 0.3rem 0.8rem;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <header>📍 GPS Tracker Dashboard</header>
+  <header>
+    📍 GPS Tracker Dashboard
+    <button class="toggle-mode" onclick="toggleTheme()">Toggle Mode</button>
+  </header>
   <div id="map"></div>
   <div class="buttons">
     <button onclick="downloadGPX()">Download GPX</button>
@@ -108,121 +138,20 @@
     <div class="stat" id="end-point">End Point: N/A</div>
     <div class="stat" id="distance">Distance: 0 km</div>
   </div>
-
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA",
-      authDomain: "gpstracker-9be3a.firebaseapp.com",
-      databaseURL: "https://gpstracker-9be3a-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "gpstracker-9be3a",
-      storageBucket: "gpstracker-9be3a.appspot.com",
-      messagingSenderId: "xxx",
-      appId: "xxx"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database().ref("trackers/device1");
-
-    let map = L.map('map').setView([0, 0], 13);
+    let map = L.map('map').setView([20.5937, 78.9629], 5);
     L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-      subdomains: ['mt0','mt1','mt2','mt3'],
-      maxZoom: 20
+      maxZoom: 20,
+      subdomains: ['mt0','mt1','mt2','mt3']
     }).addTo(map);
 
-    let polyline = L.polyline([], {color: 'cyan', weight: 3, dashArray: '5,10'}).addTo(map);
-    let marker = null, startLatLng = null;
-    let totalSpeed = 0, topSpeed = 0, totalDistance = 0, points = 0, lastLatLng = null;
-    let routeCoords = [], timeStamps = [], replayIndex = 0, replayTimer;
+    const compass = new L.Control.Compass({ autoActive: true, showDigit:true });
+    map.addControl(compass);
 
-    db.on('value', snap => {
-      const data = snap.val();
-      if (!data || !data.lat || !data.lon) return;
-
-      const lat = data.lat;
-      const lon = data.lon;
-      const speed = data.speed || 0;
-      const timestamp = data.time || new Date().toLocaleTimeString();
-      const latlng = [lat, lon];
-
-      if (!marker) {
-        marker = L.marker(latlng).addTo(map);
-        startLatLng = latlng;
-        document.getElementById('start-point').innerText = `Start Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      } else {
-        marker.setLatLng(latlng);
-      }
-
-      polyline.addLatLng(latlng);
-      L.marker(latlng).bindTooltip(timestamp).addTo(map);
-      map.setView(latlng);
-
-      totalSpeed += speed;
-      topSpeed = Math.max(topSpeed, speed);
-      points++;
-
-      if (lastLatLng) {
-        const dist = map.distance(lastLatLng, latlng) / 1000;
-        totalDistance += dist;
-      }
-      lastLatLng = latlng;
-
-      document.getElementById('end-point').innerText = `End Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      document.getElementById('topSpeedGauge').innerText = `${topSpeed.toFixed(2)} km/h`;
-      document.getElementById('avgSpeedGauge').innerText = `${(totalSpeed / points).toFixed(2)} km/h`;
-      document.getElementById('distance').innerText = `Distance: ${totalDistance.toFixed(2)} km`;
-
-      routeCoords.push(latlng);
-      timeStamps.push(timestamp);
-    });
-
-    function downloadGPX() {
-      let gpx = '<?xml version="1.0"?><gpx version="1.1" creator="KukurGPS">';
-      routeCoords.forEach((pt, i) => {
-        gpx += `<wpt lat="${pt[0]}" lon="${pt[1]}"><time>${timeStamps[i]}</time></wpt>`;
-      });
-      gpx += '</gpx>';
-      let blob = new Blob([gpx], {type: 'application/gpx+xml'});
-      let a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'route.gpx';
-      a.click();
-    }
-
-    function downloadKML() {
-      let kml = '<?xml version="1.0"?><kml><Document>';
-      routeCoords.forEach((pt, i) => {
-        kml += `<Placemark><Point><coordinates>${pt[1]},${pt[0]}</coordinates></Point><TimeStamp><when>${timeStamps[i]}</when></TimeStamp></Placemark>`;
-      });
-      kml += '</Document></kml>';
-      let blob = new Blob([kml], {type: 'application/vnd.google-earth.kml+xml'});
-      let a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'route.kml';
-      a.click();
-    }
-
-    function replayRoute() {
-      if (routeCoords.length === 0) return;
-      if (replayTimer) clearInterval(replayTimer);
-      let replayMarker = L.marker(routeCoords[0]).addTo(map);
-      replayIndex = 1;
-      replayTimer = setInterval(() => {
-        if (replayIndex >= routeCoords.length) {
-          clearInterval(replayTimer);
-          return;
-        }
-        replayMarker.setLatLng(routeCoords[replayIndex]);
-        map.setView(routeCoords[replayIndex], 17);
-        replayIndex++;
-      }, 500);
-    }
-
-    function stopReplay() {
-      if (replayTimer) clearInterval(replayTimer);
+    function toggleTheme() {
+      const root = document.documentElement;
+      const currentTheme = root.getAttribute('data-theme');
+      root.setAttribute('data-theme', currentTheme === 'dark' ? 'light' : 'dark');
     }
   </script>
 </body>
