@@ -3,92 +3,115 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>📍 GPS Tracker Dashboard</title>
+  <title>🚗 GPS Tracker Dashboard</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
     body {
       margin: 0;
       font-family: 'Segoe UI', sans-serif;
-      background: #0d0d0d;
+      background: #121212;
       color: #f0f0f0;
     }
     header {
       padding: 1rem;
-      background: #1a1a1a;
+      background: #1f1f1f;
       text-align: center;
-      font-size: 2rem;
+      font-size: 1.5rem;
       color: #00ffea;
     }
     #map {
-      height: 55vh;
+      height: 50vh;
       width: 100%;
-      border-bottom: 2px solid #00ffea;
+      z-index: 0;
     }
     .stats {
       padding: 1rem;
+      background: #1e1e1e;
       display: flex;
-      flex-wrap: wrap;
       justify-content: space-around;
-      background: #111;
+      flex-wrap: wrap;
     }
     .stat {
-      background: #1e1e1e;
-      border-radius: 10px;
-      padding: 1rem;
       margin: 1rem;
-      box-shadow: 0 0 10px #00ffc3;
-      min-width: 150px;
-    }
-    .speedometer {
-      display: flex;
-      justify-content: space-around;
-      flex-wrap: wrap;
-    }
-    canvas {
-      background: #111;
-      border-radius: 10px;
-      box-shadow: 0 0 15px #00ffc3;
-    }
-    .controls {
       padding: 1rem;
+      background: #2e2e2e;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #00ffc3;
+      min-width: 200px;
+    }
+    .buttons {
       text-align: center;
+      margin-bottom: 1rem;
     }
     button {
-      background: #00ffea;
+      padding: 0.6rem 1rem;
+      margin: 0.3rem;
       border: none;
-      padding: 0.5rem 1rem;
-      margin: 0.5rem;
-      color: #000;
-      border-radius: 5px;
+      background-color: #00ffc3;
+      color: #121212;
+      font-weight: bold;
+      border-radius: 6px;
       cursor: pointer;
+    }
+    .speedo {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      padding: 1rem;
+    }
+    .gauge {
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      background: radial-gradient(#111, #222);
+      border: 4px solid #00ffc3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 15px #00ffc3;
+    }
+    .gauge h3 {
+      margin: 0;
       font-size: 1rem;
+      color: #ccc;
+    }
+    .gauge span {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #00ffea;
     }
   </style>
 </head>
 <body>
   <header>📍 GPS Tracker Dashboard</header>
   <div id="map"></div>
+  <div class="buttons">
+    <button onclick="downloadGPX()">Download GPX</button>
+    <button onclick="downloadKML()">Download KML</button>
+    <button onclick="replayRoute()">Replay Route</button>
+    <button onclick="stopReplay()">Stop Replay</button>
+  </div>
+  <div class="speedo">
+    <div class="gauge">
+      <h3>Top Speed</h3>
+      <span id="topSpeedGauge">0 km/h</span>
+    </div>
+    <div class="gauge">
+      <h3>Avg Speed</h3>
+      <span id="avgSpeedGauge">0 km/h</span>
+    </div>
+  </div>
   <div class="stats">
     <div class="stat" id="start-point">Start Point: N/A</div>
     <div class="stat" id="end-point">End Point: N/A</div>
-    <div class="stat" id="top-speed">Top Speed: 0 km/h</div>
-    <div class="stat" id="avg-speed">Average Speed: 0 km/h</div>
     <div class="stat" id="distance">Distance: 0 km</div>
-  </div>
-  <div class="speedometer">
-    <canvas id="speedMeter" width="150" height="150"></canvas>
-    <canvas id="avgMeter" width="150" height="150"></canvas>
-  </div>
-  <div class="controls">
-    <button onclick="exportGPX()">📤 Export GPX</button>
-    <button onclick="exportKML()">📤 Export KML</button>
-    <button onclick="replayRoute()">⏪ Replay Route</button>
   </div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <script>
     const firebaseConfig = {
@@ -104,82 +127,16 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref("trackers/device1");
 
-    let map = L.map('map').setView([0, 0], 2);
-    L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-      attribution: 'Google'
+    let map = L.map('map').setView([0, 0], 13);
+    L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      subdomains: ['mt0','mt1','mt2','mt3'],
+      maxZoom: 20
     }).addTo(map);
 
-    const routePoints = [];
+    let polyline = L.polyline([], {color: 'cyan', weight: 3, dashArray: '5,10'}).addTo(map);
     let marker = null, startLatLng = null;
     let totalSpeed = 0, topSpeed = 0, totalDistance = 0, points = 0, lastLatLng = null;
-    const polyline = L.polyline([], {
-      color: '#00fff2',
-      dashArray: '10, 6',
-      weight: 5
-    }).addTo(map);
-
-    function drawMeter(canvasId, value, label) {
-      const ctx = document.getElementById(canvasId).getContext('2d');
-      ctx.clearRect(0, 0, 150, 150);
-      ctx.beginPath();
-      ctx.arc(75, 75, 60, 0, Math.PI * 2);
-      ctx.strokeStyle = '#444';
-      ctx.lineWidth = 10;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(75, 75, 60, -Math.PI / 2, (value / 150) * 2 * Math.PI - Math.PI / 2);
-      ctx.strokeStyle = '#00ffea';
-      ctx.lineWidth = 10;
-      ctx.stroke();
-      ctx.font = '16px Arial';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(label, 40, 75);
-      ctx.fillText(value.toFixed(1) + ' km/h', 30, 100);
-    }
-
-    function updateMeters() {
-      drawMeter('speedMeter', topSpeed, 'Top Speed');
-      drawMeter('avgMeter', totalSpeed / points, 'Avg Speed');
-    }
-
-    function exportGPX() {
-      let gpx = `<?xml version="1.0"?><gpx version="1.1" creator="Kukur Tracker"><trk><name>Route</name><trkseg>`;
-      for (const pt of routePoints) {
-        gpx += `<trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>`;
-      }
-      gpx += `</trkseg></trk></gpx>`;
-      const blob = new Blob([gpx], {type: 'application/gpx+xml'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'route.gpx';
-      a.click();
-    }
-
-    function exportKML() {
-      let kml = `<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><LineString><coordinates>`;
-      for (const pt of routePoints) {
-        kml += `${pt[1]},${pt[0]},0\n`;
-      }
-      kml += `</coordinates></LineString></Placemark></Document></kml>`;
-      const blob = new Blob([kml], {type: 'application/vnd.google-earth.kml+xml'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'route.kml';
-      a.click();
-    }
-
-    async function replayRoute() {
-      if (routePoints.length === 0) return;
-      polyline.setLatLngs([]);
-      for (const latlng of routePoints) {
-        marker.setLatLng(latlng);
-        polyline.addLatLng(latlng);
-        map.panTo(latlng);
-        await new Promise(res => setTimeout(res, 500));
-      }
-    }
+    let routeCoords = [], timeStamps = [], replayIndex = 0, replayTimer;
 
     db.on('value', snap => {
       const data = snap.val();
@@ -188,8 +145,8 @@
       const lat = data.lat;
       const lon = data.lon;
       const speed = data.speed || 0;
+      const timestamp = data.time || new Date().toLocaleTimeString();
       const latlng = [lat, lon];
-      routePoints.push(latlng);
 
       if (!marker) {
         marker = L.marker(latlng).addTo(map);
@@ -200,7 +157,8 @@
       }
 
       polyline.addLatLng(latlng);
-      map.setView(latlng, 16);
+      L.marker(latlng).bindTooltip(timestamp).addTo(map);
+      map.setView(latlng);
 
       totalSpeed += speed;
       topSpeed = Math.max(topSpeed, speed);
@@ -213,12 +171,59 @@
       lastLatLng = latlng;
 
       document.getElementById('end-point').innerText = `End Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      document.getElementById('top-speed').innerText = `Top Speed: ${topSpeed.toFixed(2)} km/h`;
-      document.getElementById('avg-speed').innerText = `Average Speed: ${(totalSpeed / points).toFixed(2)} km/h`;
+      document.getElementById('topSpeedGauge').innerText = `${topSpeed.toFixed(2)} km/h`;
+      document.getElementById('avgSpeedGauge').innerText = `${(totalSpeed / points).toFixed(2)} km/h`;
       document.getElementById('distance').innerText = `Distance: ${totalDistance.toFixed(2)} km`;
 
-      updateMeters();
+      routeCoords.push(latlng);
+      timeStamps.push(timestamp);
     });
+
+    function downloadGPX() {
+      let gpx = '<?xml version="1.0"?><gpx version="1.1" creator="KukurGPS">';
+      routeCoords.forEach((pt, i) => {
+        gpx += `<wpt lat="${pt[0]}" lon="${pt[1]}"><time>${timeStamps[i]}</time></wpt>`;
+      });
+      gpx += '</gpx>';
+      let blob = new Blob([gpx], {type: 'application/gpx+xml'});
+      let a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'route.gpx';
+      a.click();
+    }
+
+    function downloadKML() {
+      let kml = '<?xml version="1.0"?><kml><Document>';
+      routeCoords.forEach((pt, i) => {
+        kml += `<Placemark><Point><coordinates>${pt[1]},${pt[0]}</coordinates></Point><TimeStamp><when>${timeStamps[i]}</when></TimeStamp></Placemark>`;
+      });
+      kml += '</Document></kml>';
+      let blob = new Blob([kml], {type: 'application/vnd.google-earth.kml+xml'});
+      let a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'route.kml';
+      a.click();
+    }
+
+    function replayRoute() {
+      if (routeCoords.length === 0) return;
+      if (replayTimer) clearInterval(replayTimer);
+      let replayMarker = L.marker(routeCoords[0]).addTo(map);
+      replayIndex = 1;
+      replayTimer = setInterval(() => {
+        if (replayIndex >= routeCoords.length) {
+          clearInterval(replayTimer);
+          return;
+        }
+        replayMarker.setLatLng(routeCoords[replayIndex]);
+        map.setView(routeCoords[replayIndex], 17);
+        replayIndex++;
+      }, 500);
+    }
+
+    function stopReplay() {
+      if (replayTimer) clearInterval(replayTimer);
+    }
   </script>
 </body>
 </html>
