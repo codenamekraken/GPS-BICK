@@ -12,7 +12,6 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tomik23/circular-progress-bar@1.0.2/dist/circularProgressBar.min.js"></script>
   <style>
     :root {
       --bg-color: #0f0f1a;
@@ -49,45 +48,32 @@
     .stats, .speedo, .buttons {
       padding: 1rem;
       background: var(--card-color);
+    }
+    .stats, .speedo {
       display: flex;
+      justify-content: space-around;
       flex-wrap: wrap;
-      justify-content: center;
-      gap: 1rem;
     }
-    .stat, .gauge {
-      flex: 1 1 200px;
+    .stat {
+      margin: 1rem;
       padding: 1rem;
       background: var(--card-color);
       border-radius: 10px;
       box-shadow: 0 0 10px var(--highlight);
-      text-align: center;
-    }
-    .gauge-canvas {
-      width: 100%;
-      height: 150px;
-    }
-    .gauge-wrapper {
-      flex: 1 1 200px;
-      padding: 1rem;
-      background: var(--card-color);
-      border-radius: 10px;
-      box-shadow: 0 0 10px var(--highlight);
-      text-align: center;
+      min-width: 200px;
     }
     button {
       padding: 0.6rem 1rem;
+      margin: 0.3rem;
       border: none;
       background-color: var(--highlight);
       color: var(--bg-color);
       font-weight: bold;
       border-radius: 6px;
       cursor: pointer;
-      flex: 1 1 150px;
-      max-width: 200px;
     }
     .chart-container {
-      width: 95%;
-      max-width: 1000px;
+      width: 90%;
       margin: auto;
       background: var(--card-color);
       padding: 1rem;
@@ -111,13 +97,46 @@
       padding: 0.3rem 0.8rem;
       cursor: pointer;
     }
+    /* Classic Speedometer Styles */
+    .gauge {
+      position: relative;
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      background: radial-gradient(var(--card-color), var(--bg-color));
+      border: 4px solid var(--highlight);
+      box-shadow: inset 0 0 10px var(--highlight);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 1rem auto;
+    }
+    .needle {
+      position: absolute;
+      width: 4px;
+      height: 60px;
+      background: var(--highlight);
+      top: 30px;
+      left: calc(50% - 2px);
+      transform-origin: bottom;
+      transform: rotate(0deg);
+      transition: transform 0.3s ease-out;
+    }
+    .gauge-value {
+      position: absolute;
+      bottom: 15px;
+      font-size: 1.2rem;
+      color: var(--highlight);
+      font-weight: bold;
+    }
     @media (max-width: 600px) {
-      .stat, .gauge, .gauge-wrapper {
-        flex: 1 1 100%;
+      .gauge {
+        width: 120px;
+        height: 120px;
       }
-      button {
-        flex: 1 1 100%;
-        max-width: none;
+      .needle {
+        height: 50px;
+        top: 25px;
       }
     }
   </style>
@@ -136,43 +155,141 @@
     <button onclick="stopReplay()">Stop Replay</button>
   </div>
   <div class="speedo">
-    <div class="gauge-wrapper">
-      <h3>Top Speed</h3>
-      <div id="topSpeedMeter" class="gauge-canvas"></div>
+    <div class="gauge">
+      <div class="needle" id="topSpeedNeedle"></div>
+      <div class="gauge-value" id="topSpeedValue">0 km/h</div>
     </div>
-    <div class="gauge-wrapper">
-      <h3>Avg Speed</h3>
-      <div id="avgSpeedMeter" class="gauge-canvas"></div>
+    <div class="gauge">
+      <div class="needle" id="avgSpeedNeedle"></div>
+      <div class="gauge-value" id="avgSpeedValue">0 km/h</div>
     </div>
   </div>
   <div class="stats">
     <div class="stat" id="start-point">📍 Start Point: N/A</div>
     <div class="stat" id="end-point">🏋️ End Point: N/A</div>
-    <div class="stat" id="distance">🩽 Distance: 0 km</div>
+    <div class="stat" id="distance">🧽 Distance: 0 km</div>
   </div>
   <div class="chart-container">
     <canvas id="speedChart" height="120"></canvas>
   </div>
-  <script src="https://cdn.jsdelivr.net/gh/chocogodzilla/gps-tracker-live/main/dashboard-live.js"></script>
   <script>
-    function renderGauge(id, value, max, unit) {
-      new CircularProgressBar(id, {
-        percent: value,
-        max: max,
-        unit: unit,
-        animation: true,
-        strokeWidth: 12,
-        background: '#222',
-        color: '#00f7ff',
-        textColor: '#f0f0f0',
-        size: 150,
-        fontSize: '1.2rem'
-      });
+    const firebaseConfig = { apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA", authDomain: "gpstracker-9be3a.firebaseapp.com", databaseURL: "https://gpstracker-9be3a-default-rtdb.asia-southeast1.firebasedatabase.app", projectId: "gpstracker-9be3a", storageBucket: "gpstracker-9be3a.appspot.com", messagingSenderId: "xxx", appId: "xxx" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database().ref("trackers/device1");
+
+    const savedTheme = localStorage.getItem('gpsTheme');
+    if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+    function toggleTheme() {
+      const root = document.documentElement;
+      const currentTheme = root.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', newTheme);
+      localStorage.setItem('gpsTheme', newTheme);
     }
+
     setInterval(() => {
-      if (window.latestTopSpeed !== undefined) renderGauge("topSpeedMeter", window.latestTopSpeed, 200, "km/h");
-      if (window.latestAvgSpeed !== undefined) renderGauge("avgSpeedMeter", window.latestAvgSpeed, 200, "km/h");
-    }, 1500);
+      const now = new Date();
+      document.getElementById("liveTime").textContent = now.toLocaleString();
+    }, 1000);
+
+    let map = L.map('map').setView([20.5937, 78.9629], 6);
+    let tileSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+    let tileOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+    tileSatellite.addTo(map);
+    let currentLayer = tileSatellite;
+
+    const btn = document.createElement('button');
+    btn.innerText = 'Toggle Map Layer';
+    btn.classList.add('toggle-mode');
+    btn.onclick = () => {
+      if (map.hasLayer(tileSatellite)) {
+        map.removeLayer(tileSatellite);
+        tileOSM.addTo(map);
+      } else {
+        map.removeLayer(tileOSM);
+        tileSatellite.addTo(map);
+      }
+    };
+    document.body.appendChild(btn);
+
+    const compass = new L.Control.Compass({ autoActive: true, showDigit: true });
+    map.addControl(compass);
+
+    const routeCoordinates = [], speedHistory = [], speedLabels = [];
+    const trailLine = L.polyline([], { color: '#00ffff', weight: 4, opacity: 0.7, dashArray: '10, 10', lineCap: 'round' }).addTo(map);
+
+    const startIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', iconSize: [30, 30], iconAnchor: [15, 30] });
+    const endIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/149/149059.png', iconSize: [30, 30], iconAnchor: [15, 30] });
+
+    let marker = null, startMarker = null, endMarker = null;
+    let totalDistance = 0, totalSpeed = 0, topSpeed = 0, points = 0, lastLatLng = null;
+
+    const speedChart = new Chart(document.getElementById("speedChart"), {
+      type: 'line',
+      data: {
+        labels: speedLabels,
+        datasets: [{
+          label: 'Speed (km/h)',
+          data: speedHistory,
+          borderColor: 'aqua',
+          backgroundColor: 'transparent',
+          tension: 0.3
+        }]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+
+    function updateNeedle(id, speed, maxSpeed = 160) {
+      const needle = document.getElementById(id);
+      const angle = (speed / maxSpeed) * 180 - 90;
+      needle.style.transform = `rotate(${angle}deg)`;
+    }
+
+    function updateMarker(lat, lon, speed) {
+      const latlng = [lat, lon];
+      if (!marker) {
+        marker = L.marker(latlng).addTo(map);
+        startMarker = L.marker(latlng, { icon: startIcon }).addTo(map);
+        document.getElementById('start-point').innerText = `📍 Start Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      } else {
+        marker.setLatLng(latlng);
+        if (endMarker) map.removeLayer(endMarker);
+        endMarker = L.marker(latlng, { icon: endIcon }).addTo(map);
+        document.getElementById('end-point').innerText = `🏋️ End Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      }
+      trailLine.addLatLng(latlng);
+      map.setView(latlng, 16);
+
+      totalSpeed += speed;
+      topSpeed = Math.max(topSpeed, speed);
+      points++;
+      if (lastLatLng) {
+        const dist = map.distance(lastLatLng, latlng) / 1000;
+        totalDistance += dist;
+      }
+      lastLatLng = latlng;
+
+      speedHistory.push(speed);
+      speedLabels.push(new Date().toLocaleTimeString());
+      if (speedHistory.length > 20) {
+        speedHistory.shift();
+        speedLabels.shift();
+      }
+      speedChart.update();
+
+      const avgSpeed = totalSpeed / points;
+      document.getElementById('topSpeedValue').innerText = `${topSpeed.toFixed(1)} km/h`;
+      document.getElementById('avgSpeedValue').innerText = `${avgSpeed.toFixed(1)} km/h`;
+      updateNeedle('topSpeedNeedle', topSpeed);
+      updateNeedle('avgSpeedNeedle', avgSpeed);
+      document.getElementById('distance').innerText = `🧽 Distance: ${totalDistance.toFixed(2)} km`;
+    }
+
+    db.on('value', snap => {
+      const data = snap.val();
+      if (!data || !data.lat || !data.lon) return;
+      updateMarker(data.lat, data.lon, data.speed || 0);
+    });
   </script>
 </body>
 </html>
