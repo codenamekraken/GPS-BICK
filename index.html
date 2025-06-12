@@ -86,16 +86,22 @@
       font-weight: bold;
       color: var(--highlight);
     }
-    .toggle-mode {
+    .header-controls {
       position: absolute;
       right: 1rem;
       top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .toggle-mode, .toggle-layer {
       background: none;
       border: 2px solid var(--highlight);
       border-radius: 6px;
       color: var(--highlight);
       padding: 0.3rem 0.8rem;
       cursor: pointer;
+      font-size: 0.9rem;
     }
     .speedo {
       display: flex;
@@ -134,10 +140,15 @@
 <body>
   <header>
     🚀 Neon Cyberpunk GPS Dashboard
-    <button class="toggle-mode" onclick="toggleTheme()">Toggle Mode</button>
+    <div class="header-controls">
+      <button class="toggle-mode" onclick="toggleTheme()">Toggle Mode</button>
+      <button class="toggle-layer" onclick="toggleMapLayer()">Toggle Map Layer</button>
+    </div>
   </header>
+
   <div class="live-time" id="liveTime">Loading Time...</div>
   <div id="map"></div>
+
   <div class="buttons">
     <button onclick="downloadGPX()">Download GPX</button>
     <button onclick="downloadKML()">Download KML</button>
@@ -194,16 +205,16 @@
       document.getElementById("liveTime").textContent = now.toLocaleString();
     }, 1000);
 
-    let map = L.map('map').setView([20.5937, 78.9629], 6);
-    let tileSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-    let tileOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+    let map = L.map('map').setView([20.5937, 78.9629], 19); // max zoom
+    let tileSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 20
+    });
+    let tileOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 20
+    });
     tileSatellite.addTo(map);
-    let currentLayer = tileSatellite;
 
-    const btn = document.createElement('button');
-    btn.innerText = 'Toggle Map Layer';
-    btn.classList.add('toggle-mode');
-    btn.onclick = () => {
+    function toggleMapLayer() {
       if (map.hasLayer(tileSatellite)) {
         map.removeLayer(tileSatellite);
         tileOSM.addTo(map);
@@ -211,8 +222,7 @@
         map.removeLayer(tileOSM);
         tileSatellite.addTo(map);
       }
-    };
-    document.body.appendChild(btn);
+    }
 
     const compass = new L.Control.Compass({ autoActive: true, showDigit: true });
     map.addControl(compass);
@@ -283,7 +293,7 @@
         document.getElementById('end-point').innerText = `🏋️ End Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
       }
       trailLine.addLatLng(latlng);
-      map.setView(latlng, 16);
+      map.setView(latlng, 19); // max zoom while tracking
 
       totalSpeed += speed;
       topSpeed = Math.max(topSpeed, speed);
@@ -303,7 +313,6 @@
       speedChart.update();
 
       const avgSpeed = totalSpeed / points;
-
       drawMeter("topSpeedMeter", topSpeed, 120);
       drawMeter("avgSpeedMeter", avgSpeed, 120);
 
