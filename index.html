@@ -9,8 +9,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-compass/dist/leaflet-compass.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-compass/dist/leaflet-compass.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/togeojson@0.16.0/togeojson.min.js"></script>
-  <script src="https://unpkg.com/leaflet.polyline.snakeanim@0.2.0/leaflet.polyline.snakeanim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
   <style>
@@ -46,24 +45,22 @@
       z-index: 0;
       filter: brightness(1.1) contrast(1.2);
     }
-    .stats {
+    .stats, .speedo, .buttons {
       padding: 1rem;
       background: var(--card-color);
+    }
+    .stats, .speedo {
       display: flex;
       justify-content: space-around;
       flex-wrap: wrap;
     }
-    .stat {
+    .stat, .gauge {
       margin: 1rem;
       padding: 1rem;
       background: var(--card-color);
       border-radius: 10px;
       box-shadow: 0 0 10px var(--highlight);
       min-width: 200px;
-    }
-    .buttons {
-      text-align: center;
-      margin-bottom: 1rem;
     }
     button {
       padding: 0.6rem 1rem;
@@ -75,39 +72,19 @@
       border-radius: 6px;
       cursor: pointer;
     }
-    .speedo {
-      display: flex;
-      justify-content: center;
-      gap: 2rem;
+    .chart-container {
+      width: 90%;
+      margin: auto;
+      background: var(--card-color);
       padding: 1rem;
+      border-radius: 12px;
+      box-shadow: 0 0 10px var(--highlight);
     }
-    .gauge {
-      width: 150px;
-      height: 150px;
-      border-radius: 50%;
-      background: radial-gradient(var(--bg-color), var(--card-color));
-      border: 4px dashed var(--highlight);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 0 15px var(--highlight), 0 0 25px var(--highlight) inset;
-      animation: pulse 2s infinite;
-    }
-    .gauge h3 {
-      margin: 0;
-      font-size: 1rem;
-      color: var(--text-color);
-    }
-    .gauge span {
-      font-size: 1.5rem;
+    .live-time {
+      text-align: center;
+      padding: 0.5rem;
       font-weight: bold;
       color: var(--highlight);
-    }
-    @keyframes pulse {
-      0% { box-shadow: 0 0 15px var(--highlight); }
-      50% { box-shadow: 0 0 25px var(--highlight), 0 0 40px var(--highlight) inset; }
-      100% { box-shadow: 0 0 15px var(--highlight); }
     }
     .toggle-mode {
       position: absolute;
@@ -127,6 +104,7 @@
     🚀 Neon Cyberpunk GPS Dashboard
     <button class="toggle-mode" onclick="toggleTheme()">Toggle Mode</button>
   </header>
+  <div class="live-time" id="liveTime">Loading Time...</div>
   <div id="map"></div>
   <div class="buttons">
     <button onclick="downloadGPX()">Download GPX</button>
@@ -149,25 +127,16 @@
     <div class="stat" id="end-point">🏋️ End Point: N/A</div>
     <div class="stat" id="distance">🧽 Distance: 0 km</div>
   </div>
+  <div class="chart-container">
+    <canvas id="speedChart" height="120"></canvas>
+  </div>
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA",
-      authDomain: "gpstracker-9be3a.firebaseapp.com",
-      databaseURL: "https://gpstracker-9be3a-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "gpstracker-9be3a",
-      storageBucket: "gpstracker-9be3a.appspot.com",
-      messagingSenderId: "xxx",
-      appId: "xxx"
-    };
-
+    const firebaseConfig = { apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA", authDomain: "gpstracker-9be3a.firebaseapp.com", databaseURL: "https://gpstracker-9be3a-default-rtdb.asia-southeast1.firebasedatabase.app", projectId: "gpstracker-9be3a", storageBucket: "gpstracker-9be3a.appspot.com", messagingSenderId: "xxx", appId: "xxx" };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref("trackers/device1");
 
     const savedTheme = localStorage.getItem('gpsTheme');
-    if (savedTheme) {
-      document.documentElement.setAttribute('data-theme', savedTheme);
-    }
-
+    if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
     function toggleTheme() {
       const root = document.documentElement;
       const currentTheme = root.getAttribute('data-theme');
@@ -176,40 +145,57 @@
       localStorage.setItem('gpsTheme', newTheme);
     }
 
-    let map = L.map('map').setView([20.5937, 78.9629], 6);
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById("liveTime").textContent = now.toLocaleString();
+    }, 1000);
 
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: '&copy; Esri, Maxar, Earthstar Geographics',
-      maxZoom: 20
-    }).addTo(map);
+    let map = L.map('map').setView([20.5937, 78.9629], 6);
+    let tileSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+    let tileOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+    tileSatellite.addTo(map);
+    let currentLayer = tileSatellite;
+
+    const btn = document.createElement('button');
+    btn.innerText = 'Toggle Map Layer';
+    btn.classList.add('toggle-mode');
+    btn.onclick = () => {
+      if (map.hasLayer(tileSatellite)) {
+        map.removeLayer(tileSatellite);
+        tileOSM.addTo(map);
+      } else {
+        map.removeLayer(tileOSM);
+        tileSatellite.addTo(map);
+      }
+    };
+    document.body.appendChild(btn);
 
     const compass = new L.Control.Compass({ autoActive: true, showDigit: true });
     map.addControl(compass);
 
-    const routeCoordinates = [];
-    const trailLine = L.polyline([], {
-      color: '#00ffff',
-      weight: 4,
-      opacity: 0.7,
-      dashArray: '10, 10',
-      lineCap: 'round'
-    }).addTo(map);
+    const routeCoordinates = [], speedHistory = [], speedLabels = [];
+    const trailLine = L.polyline([], { color: '#00ffff', weight: 4, opacity: 0.7, dashArray: '10, 10', lineCap: 'round' }).addTo(map);
 
-    const startIcon = L.icon({
-      iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-      iconSize: [30, 30],
-      iconAnchor: [15, 30]
-    });
-
-    const endIcon = L.icon({
-      iconUrl: 'https://cdn-icons-png.flaticon.com/512/149/149059.png',
-      iconSize: [30, 30],
-      iconAnchor: [15, 30]
-    });
+    const startIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', iconSize: [30, 30], iconAnchor: [15, 30] });
+    const endIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/149/149059.png', iconSize: [30, 30], iconAnchor: [15, 30] });
 
     let marker = null, startMarker = null, endMarker = null;
-    let totalDistance = 0, totalSpeed = 0, topSpeed = 0, points = 0;
-    let lastLatLng = null;
+    let totalDistance = 0, totalSpeed = 0, topSpeed = 0, points = 0, lastLatLng = null;
+
+    const speedChart = new Chart(document.getElementById("speedChart"), {
+      type: 'line',
+      data: {
+        labels: speedLabels,
+        datasets: [{
+          label: 'Speed (km/h)',
+          data: speedHistory,
+          borderColor: 'aqua',
+          backgroundColor: 'transparent',
+          tension: 0.3
+        }]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
 
     function updateMarker(lat, lon, speed) {
       const latlng = [lat, lon];
@@ -234,6 +220,14 @@
         totalDistance += dist;
       }
       lastLatLng = latlng;
+
+      speedHistory.push(speed);
+      speedLabels.push(new Date().toLocaleTimeString());
+      if (speedHistory.length > 20) {
+        speedHistory.shift();
+        speedLabels.shift();
+      }
+      speedChart.update();
 
       document.getElementById('topSpeedGauge').innerText = `${topSpeed.toFixed(2)} km/h`;
       document.getElementById('avgSpeedGauge').innerText = `${(totalSpeed / points).toFixed(2)} km/h`;
