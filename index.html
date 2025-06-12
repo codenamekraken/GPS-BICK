@@ -11,11 +11,13 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap');
     :root {
-      --bg: #000000;
+      --bg: #0c0c1c;
       --text: #00ffcc;
       --accent: #00f7ff;
-      --gauge-bg: #111;
+      --hud-bg: rgba(0, 0, 0, 0.7);
+      --map-outline: #00ffff;
     }
     body {
       margin: 0;
@@ -29,16 +31,36 @@
       font-size: 1.5rem;
       color: var(--accent);
       background-color: #111;
+      border-bottom: 2px solid var(--accent);
     }
     #map {
-      height: 300px;
-      filter: brightness(1.2);
+      height: 320px;
+      filter: brightness(1.3);
+      border-bottom: 3px solid var(--accent);
+    }
+    .side-menu {
+      position: fixed;
+      top: 60px;
+      left: 10px;
+      width: 200px;
+      background: var(--hud-bg);
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      padding: 1rem;
+      z-index: 999;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .side-menu h3 {
+      margin-top: 0;
+      font-size: 1.2rem;
+      color: var(--accent);
     }
     .gauges {
       display: flex;
       justify-content: space-around;
       flex-wrap: wrap;
-      background: var(--gauge-bg);
+      background: #111;
       padding: 1rem;
     }
     canvas.speed-meter {
@@ -63,6 +85,10 @@
         flex-direction: column;
         align-items: center;
       }
+      .side-menu {
+        width: 90%;
+        left: 5%;
+      }
     }
   </style>
 </head>
@@ -70,19 +96,26 @@
   <header>
     🚀 CAR HUD DASHBOARD
   </header>
-
   <div id="map"></div>
+  <div class="side-menu">
+    <h3>MENU</h3>
+    <ul>
+      <li>Live Location</li>
+      <li>Speed Stats</li>
+      <li>Track Logs</li>
+      <li>Fuel Efficiency</li>
+      <li>Settings</li>
+    </ul>
+  </div>
   <div class="gauges">
     <canvas id="topSpeedMeter" class="speed-meter"></canvas>
     <canvas id="avgSpeedMeter" class="speed-meter"></canvas>
   </div>
-
   <div class="info">
     <div id="start-point">Start: --</div>
     <div id="end-point">End: --</div>
     <div id="distance">Distance: 0 km</div>
   </div>
-
   <div class="chart">
     <canvas id="speedChart"></canvas>
   </div>
@@ -101,7 +134,7 @@
     const db = firebase.database().ref("trackers/device1");
 
     const map = L.map('map').setView([20.5937, 78.9629], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 20
     }).addTo(map);
 
