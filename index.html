@@ -3,178 +3,88 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🚗 GPS Tracker Dashboard</title>
+  <title>🚗 Car HUD GPS Dashboard</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-compass/dist/leaflet-compass.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet-compass/dist/leaflet-compass.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
   <style>
     :root {
-      --bg-color: #0f0f1a;
-      --text-color: #f0f0f0;
-      --card-color: #1a1a2e;
-      --highlight: #00f7ff;
-    }
-    [data-theme="light"] {
-      --bg-color: #ffffff;
-      --text-color: #000000;
-      --card-color: #f0f0f0;
-      --highlight: #0077ff;
+      --bg: #000000;
+      --text: #00ffcc;
+      --accent: #00f7ff;
+      --gauge-bg: #111;
     }
     body {
       margin: 0;
-      font-family: 'Segoe UI', sans-serif;
-      background: var(--bg-color);
-      color: var(--text-color);
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Orbitron', sans-serif;
     }
     header {
-      padding: 1rem;
-      background: var(--card-color);
       text-align: center;
+      padding: 0.5rem;
       font-size: 1.5rem;
-      color: var(--highlight);
-      position: relative;
+      color: var(--accent);
+      background-color: #111;
     }
     #map {
-      height: 50vh;
-      width: 100%;
-      z-index: 0;
-      filter: brightness(1.1) contrast(1.2);
+      height: 300px;
+      filter: brightness(1.2);
     }
-    .stats, .buttons {
-      padding: 1rem;
-      background: var(--card-color);
-    }
-    .stats {
+    .gauges {
       display: flex;
       justify-content: space-around;
       flex-wrap: wrap;
-    }
-    .stat {
-      margin: 1rem;
+      background: var(--gauge-bg);
       padding: 1rem;
-      background: var(--card-color);
-      border-radius: 10px;
-      box-shadow: 0 0 10px var(--highlight);
-      min-width: 200px;
-    }
-    button {
-      padding: 0.6rem 1rem;
-      margin: 0.3rem;
-      border: none;
-      background-color: var(--highlight);
-      color: var(--bg-color);
-      font-weight: bold;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .chart-container {
-      width: 90%;
-      margin: auto;
-      background: var(--card-color);
-      padding: 1rem;
-      border-radius: 12px;
-      box-shadow: 0 0 10px var(--highlight);
-    }
-    .live-time {
-      text-align: center;
-      padding: 0.5rem;
-      font-weight: bold;
-      color: var(--highlight);
-    }
-    .header-controls {
-      position: absolute;
-      right: 1rem;
-      top: 1rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    .toggle-mode, .toggle-layer {
-      background: none;
-      border: 2px solid var(--highlight);
-      border-radius: 6px;
-      color: var(--highlight);
-      padding: 0.3rem 0.8rem;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-    .speedo {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 2rem;
-      background: var(--card-color);
-      padding: 1rem;
-    }
-    .gauge {
-      width: 220px;
-      height: 220px;
-      position: relative;
     }
     canvas.speed-meter {
-      width: 100%;
-      height: 100%;
+      width: 220px;
+      height: 220px;
     }
-    .gauge-label {
-      position: absolute;
-      bottom: 10px;
-      width: 100%;
+    .info {
+      display: flex;
+      justify-content: space-evenly;
+      background: #111;
+      padding: 1rem;
+    }
+    .info div {
       text-align: center;
-      color: var(--highlight);
-      font-weight: bold;
-      font-size: 1.1rem;
+      flex: 1;
     }
-    @media (max-width: 600px) {
-      .gauge {
-        width: 160px;
-        height: 160px;
+    .chart {
+      padding: 1rem;
+    }
+    @media (max-width: 768px) {
+      .gauges {
+        flex-direction: column;
+        align-items: center;
       }
     }
   </style>
 </head>
 <body>
   <header>
-    🚀 Neon Cyberpunk GPS Dashboard
-    <div class="header-controls">
-      <button class="toggle-mode" onclick="toggleTheme()">Toggle Mode</button>
-      <button class="toggle-layer" onclick="toggleMapLayer()">Toggle Map Layer</button>
-    </div>
+    🚀 CAR HUD DASHBOARD
   </header>
 
-  <div class="live-time" id="liveTime">Loading Time...</div>
   <div id="map"></div>
-
-  <div class="buttons">
-    <button onclick="downloadGPX()">Download GPX</button>
-    <button onclick="downloadKML()">Download KML</button>
-    <button onclick="replayRoute()">Replay Route</button>
-    <button onclick="stopReplay()">Stop Replay</button>
+  <div class="gauges">
+    <canvas id="topSpeedMeter" class="speed-meter"></canvas>
+    <canvas id="avgSpeedMeter" class="speed-meter"></canvas>
   </div>
 
-  <div class="speedo">
-    <div class="gauge">
-      <canvas id="topSpeedMeter" class="speed-meter"></canvas>
-      <div class="gauge-label">Top Speed</div>
-    </div>
-    <div class="gauge">
-      <canvas id="avgSpeedMeter" class="speed-meter"></canvas>
-      <div class="gauge-label">Avg Speed</div>
-    </div>
+  <div class="info">
+    <div id="start-point">Start: --</div>
+    <div id="end-point">End: --</div>
+    <div id="distance">Distance: 0 km</div>
   </div>
 
-  <div class="stats">
-    <div class="stat" id="start-point">📍 Start Point: N/A</div>
-    <div class="stat" id="end-point">🏋️ End Point: N/A</div>
-    <div class="stat" id="distance">🧽 Distance: 0 km</div>
-  </div>
-
-  <div class="chart-container">
-    <canvas id="speedChart" height="120"></canvas>
+  <div class="chart">
+    <canvas id="speedChart"></canvas>
   </div>
 
   <script>
@@ -190,60 +100,24 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref("trackers/device1");
 
-    const savedTheme = localStorage.getItem('gpsTheme');
-    if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
-    function toggleTheme() {
-      const root = document.documentElement;
-      const currentTheme = root.getAttribute('data-theme');
-      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', newTheme);
-      localStorage.setItem('gpsTheme', newTheme);
-    }
-
-    setInterval(() => {
-      const now = new Date();
-      document.getElementById("liveTime").textContent = now.toLocaleString();
-    }, 1000);
-
-    let map = L.map('map').setView([20.5937, 78.9629], 19); // max zoom
-    let tileSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    const map = L.map('map').setView([20.5937, 78.9629], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 20
-    });
-    let tileOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 20
-    });
-    tileSatellite.addTo(map);
+    }).addTo(map);
 
-    function toggleMapLayer() {
-      if (map.hasLayer(tileSatellite)) {
-        map.removeLayer(tileSatellite);
-        tileOSM.addTo(map);
-      } else {
-        map.removeLayer(tileOSM);
-        tileSatellite.addTo(map);
-      }
-    }
-
-    const compass = new L.Control.Compass({ autoActive: true, showDigit: true });
-    map.addControl(compass);
-
-    const routeCoordinates = [], speedHistory = [], speedLabels = [];
-    const trailLine = L.polyline([], { color: '#00ffff', weight: 4, opacity: 0.7, dashArray: '10, 10', lineCap: 'round' }).addTo(map);
-
-    const startIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', iconSize: [30, 30], iconAnchor: [15, 30] });
-    const endIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/149/149059.png', iconSize: [30, 30], iconAnchor: [15, 30] });
-
-    let marker = null, startMarker = null, endMarker = null;
-    let totalDistance = 0, totalSpeed = 0, topSpeed = 0, points = 0, lastLatLng = null;
+    let marker, startMarker, endMarker;
+    const trail = L.polyline([], { color: '#00ffff', weight: 5 }).addTo(map);
+    let totalDistance = 0, topSpeed = 0, totalSpeed = 0, count = 0, lastLatLng;
+    const speedData = [], speedTime = [];
 
     const speedChart = new Chart(document.getElementById("speedChart"), {
       type: 'line',
       data: {
-        labels: speedLabels,
+        labels: speedTime,
         datasets: [{
           label: 'Speed (km/h)',
-          data: speedHistory,
-          borderColor: 'aqua',
+          data: speedData,
+          borderColor: 'cyan',
           backgroundColor: 'transparent',
           tension: 0.3
         }]
@@ -251,78 +125,74 @@
       options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
 
-    function drawMeter(canvasId, value, maxValue) {
+    function drawGauge(canvasId, value, maxVal) {
       const canvas = document.getElementById(canvasId);
       const ctx = canvas.getContext("2d");
       const w = canvas.width = canvas.offsetWidth;
       const h = canvas.height = canvas.offsetHeight;
-      const cx = w / 2;
-      const cy = h / 2;
-      const r = Math.min(cx, cy) - 10;
+      const cx = w / 2, cy = h / 2, r = Math.min(cx, cy) - 10;
 
       ctx.clearRect(0, 0, w, h);
       ctx.beginPath();
       ctx.arc(cx, cy, r, Math.PI, 0);
-      ctx.strokeStyle = '#444';
+      ctx.strokeStyle = '#222';
       ctx.lineWidth = 12;
       ctx.stroke();
 
       ctx.beginPath();
-      const endAngle = Math.PI + (Math.PI * value / maxValue);
-      ctx.arc(cx, cy, r, Math.PI, endAngle);
+      ctx.arc(cx, cy, r, Math.PI, Math.PI + (Math.PI * value / maxVal));
       ctx.strokeStyle = '#00f7ff';
       ctx.lineWidth = 12;
       ctx.stroke();
 
-      ctx.fillStyle = '#fff';
-      ctx.font = "bold 18px Arial";
+      ctx.fillStyle = 'white';
+      ctx.font = "bold 20px Orbitron";
       ctx.textAlign = "center";
       ctx.fillText(value.toFixed(1) + " km/h", cx, cy + 10);
     }
 
-    function updateMarker(lat, lon, speed) {
+    function update(lat, lon, speed) {
       const latlng = [lat, lon];
       if (!marker) {
         marker = L.marker(latlng).addTo(map);
-        startMarker = L.marker(latlng, { icon: startIcon }).addTo(map);
-        document.getElementById('start-point').innerText = `📍 Start Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        startMarker = L.marker(latlng).addTo(map);
+        document.getElementById('start-point').innerText = `Start: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
       } else {
         marker.setLatLng(latlng);
         if (endMarker) map.removeLayer(endMarker);
-        endMarker = L.marker(latlng, { icon: endIcon }).addTo(map);
-        document.getElementById('end-point').innerText = `🏋️ End Point: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        endMarker = L.marker(latlng).addTo(map);
+        document.getElementById('end-point').innerText = `End: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
       }
-      trailLine.addLatLng(latlng);
-      map.setView(latlng, 19); // max zoom while tracking
+      trail.addLatLng(latlng);
+      map.setView(latlng);
 
-      totalSpeed += speed;
-      topSpeed = Math.max(topSpeed, speed);
-      points++;
       if (lastLatLng) {
         const dist = map.distance(lastLatLng, latlng) / 1000;
         totalDistance += dist;
       }
       lastLatLng = latlng;
 
-      speedHistory.push(speed);
-      speedLabels.push(new Date().toLocaleTimeString());
-      if (speedHistory.length > 20) {
-        speedHistory.shift();
-        speedLabels.shift();
+      totalSpeed += speed;
+      topSpeed = Math.max(topSpeed, speed);
+      count++;
+      speedData.push(speed);
+      speedTime.push(new Date().toLocaleTimeString());
+      if (speedData.length > 25) {
+        speedData.shift();
+        speedTime.shift();
       }
       speedChart.update();
 
-      const avgSpeed = totalSpeed / points;
-      drawMeter("topSpeedMeter", topSpeed, 120);
-      drawMeter("avgSpeedMeter", avgSpeed, 120);
-
-      document.getElementById('distance').innerText = `🧽 Distance: ${totalDistance.toFixed(2)} km`;
+      const avg = totalSpeed / count;
+      drawGauge("topSpeedMeter", topSpeed, 120);
+      drawGauge("avgSpeedMeter", avg, 120);
+      document.getElementById('distance').innerText = `Distance: ${totalDistance.toFixed(2)} km`;
     }
 
     db.on('value', snap => {
-      const data = snap.val();
-      if (!data || !data.lat || !data.lon) return;
-      updateMarker(data.lat, data.lon, data.speed || 0);
+      const d = snap.val();
+      if (!d || !d.lat || !d.lon) return;
+      update(d.lat, d.lon, d.speed || 0);
     });
   </script>
 </body>
