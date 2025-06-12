@@ -45,11 +45,11 @@
       z-index: 0;
       filter: brightness(1.1) contrast(1.2);
     }
-    .stats, .speedo, .buttons {
+    .stats, .buttons {
       padding: 1rem;
       background: var(--card-color);
     }
-    .stats, .speedo {
+    .stats {
       display: flex;
       justify-content: space-around;
       flex-wrap: wrap;
@@ -97,46 +97,36 @@
       padding: 0.3rem 0.8rem;
       cursor: pointer;
     }
-    /* Classic Speedometer Styles */
-    .gauge {
-      position: relative;
-      width: 150px;
-      height: 150px;
-      border-radius: 50%;
-      background: radial-gradient(var(--card-color), var(--bg-color));
-      border: 4px solid var(--highlight);
-      box-shadow: inset 0 0 10px var(--highlight);
+    .speedo {
       display: flex;
-      align-items: center;
+      flex-wrap: wrap;
       justify-content: center;
-      margin: 1rem auto;
+      gap: 2rem;
+      background: var(--card-color);
+      padding: 1rem;
     }
-    .needle {
-      position: absolute;
-      width: 4px;
-      height: 60px;
-      background: var(--highlight);
-      top: 30px;
-      left: calc(50% - 2px);
-      transform-origin: bottom;
-      transform: rotate(0deg);
-      transition: transform 0.3s ease-out;
+    .gauge {
+      width: 220px;
+      height: 220px;
+      position: relative;
     }
-    .gauge-value {
+    canvas.speed-meter {
+      width: 100%;
+      height: 100%;
+    }
+    .gauge-label {
       position: absolute;
-      bottom: 15px;
-      font-size: 1.2rem;
+      bottom: 10px;
+      width: 100%;
+      text-align: center;
       color: var(--highlight);
       font-weight: bold;
+      font-size: 1.1rem;
     }
     @media (max-width: 600px) {
       .gauge {
-        width: 120px;
-        height: 120px;
-      }
-      .needle {
-        height: 50px;
-        top: 25px;
+        width: 160px;
+        height: 160px;
       }
     }
   </style>
@@ -154,26 +144,38 @@
     <button onclick="replayRoute()">Replay Route</button>
     <button onclick="stopReplay()">Stop Replay</button>
   </div>
+
   <div class="speedo">
     <div class="gauge">
-      <div class="needle" id="topSpeedNeedle"></div>
-      <div class="gauge-value" id="topSpeedValue">0 km/h</div>
+      <canvas id="topSpeedMeter" class="speed-meter"></canvas>
+      <div class="gauge-label">Top Speed</div>
     </div>
     <div class="gauge">
-      <div class="needle" id="avgSpeedNeedle"></div>
-      <div class="gauge-value" id="avgSpeedValue">0 km/h</div>
+      <canvas id="avgSpeedMeter" class="speed-meter"></canvas>
+      <div class="gauge-label">Avg Speed</div>
     </div>
   </div>
+
   <div class="stats">
     <div class="stat" id="start-point">📍 Start Point: N/A</div>
     <div class="stat" id="end-point">🏋️ End Point: N/A</div>
     <div class="stat" id="distance">🧽 Distance: 0 km</div>
   </div>
+
   <div class="chart-container">
     <canvas id="speedChart" height="120"></canvas>
   </div>
+
   <script>
-    const firebaseConfig = { apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA", authDomain: "gpstracker-9be3a.firebaseapp.com", databaseURL: "https://gpstracker-9be3a-default-rtdb.asia-southeast1.firebasedatabase.app", projectId: "gpstracker-9be3a", storageBucket: "gpstracker-9be3a.appspot.com", messagingSenderId: "xxx", appId: "xxx" };
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA",
+      authDomain: "gpstracker-9be3a.firebaseapp.com",
+      databaseURL: "https://gpstracker-9be3a-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "gpstracker-9be3a",
+      storageBucket: "gpstracker-9be3a.appspot.com",
+      messagingSenderId: "xxx",
+      appId: "xxx"
+    };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref("trackers/device1");
 
@@ -239,10 +241,33 @@
       options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
 
-    function updateNeedle(id, speed, maxSpeed = 160) {
-      const needle = document.getElementById(id);
-      const angle = (speed / maxSpeed) * 180 - 90;
-      needle.style.transform = `rotate(${angle}deg)`;
+    function drawMeter(canvasId, value, maxValue) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext("2d");
+      const w = canvas.width = canvas.offsetWidth;
+      const h = canvas.height = canvas.offsetHeight;
+      const cx = w / 2;
+      const cy = h / 2;
+      const r = Math.min(cx, cy) - 10;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, Math.PI, 0);
+      ctx.strokeStyle = '#444';
+      ctx.lineWidth = 12;
+      ctx.stroke();
+
+      ctx.beginPath();
+      const endAngle = Math.PI + (Math.PI * value / maxValue);
+      ctx.arc(cx, cy, r, Math.PI, endAngle);
+      ctx.strokeStyle = '#00f7ff';
+      ctx.lineWidth = 12;
+      ctx.stroke();
+
+      ctx.fillStyle = '#fff';
+      ctx.font = "bold 18px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(value.toFixed(1) + " km/h", cx, cy + 10);
     }
 
     function updateMarker(lat, lon, speed) {
@@ -278,10 +303,10 @@
       speedChart.update();
 
       const avgSpeed = totalSpeed / points;
-      document.getElementById('topSpeedValue').innerText = `${topSpeed.toFixed(1)} km/h`;
-      document.getElementById('avgSpeedValue').innerText = `${avgSpeed.toFixed(1)} km/h`;
-      updateNeedle('topSpeedNeedle', topSpeed);
-      updateNeedle('avgSpeedNeedle', avgSpeed);
+
+      drawMeter("topSpeedMeter", topSpeed, 120);
+      drawMeter("avgSpeedMeter", avgSpeed, 120);
+
       document.getElementById('distance').innerText = `🧽 Distance: ${totalDistance.toFixed(2)} km`;
     }
 
