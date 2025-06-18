@@ -1,60 +1,91 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>🚘 Smart Car Dashboard</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
+    :root {
+      --bg: #0a0f1a;
+      --fg: #00ffe7;
+      --stat-bg: #111a2e;
+      --highlight: #7fffd4;
+    }
+    [data-theme="light"] {
+      --bg: #f8f9fa;
+      --fg: #212529;
+      --stat-bg: #ffffff;
+      --highlight: #007bff;
+    }
     body {
       margin: 0;
       font-family: 'Orbitron', sans-serif;
-      background: #0a0f1a;
-      color: #00ffe7;
+      background: var(--bg);
+      color: var(--fg);
+      transition: all 0.4s;
     }
     header {
       padding: 1rem;
       text-align: center;
       font-size: 1.8rem;
-      background: #020613;
-      border-bottom: 2px solid #00ffe7;
+      background: var(--stat-bg);
+      border-bottom: 2px solid var(--fg);
     }
     #map {
       height: 350px;
-      border-bottom: 2px solid #00ffe7;
+      border-bottom: 2px solid var(--fg);
+    }
+    .top-controls {
+      padding: 0.5rem 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      background: var(--stat-bg);
+    }
+    .top-controls button, .top-controls select {
+      font-family: Orbitron;
+      background: var(--bg);
+      color: var(--fg);
+      border: 1px solid var(--fg);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      margin: 0.2rem;
     }
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 1rem;
       padding: 1rem;
-      background: #0d121f;
+      background: var(--bg);
     }
     .stat {
-      background: #111a2e;
+      background: var(--stat-bg);
       padding: 1rem;
       border-radius: 10px;
-      box-shadow: 0 0 10px #00ffe7;
+      box-shadow: 0 0 10px var(--fg);
       text-align: center;
     }
     .stat h2 {
       margin: 0 0 10px;
       font-size: 1.2rem;
-      color: #7fffd4;
+      color: var(--highlight);
     }
     .stat p {
       font-size: 1.5rem;
     }
     canvas {
-      background: #0d121f;
+      background: var(--stat-bg);
       border-radius: 10px;
       padding: 1rem;
-      box-shadow: 0 0 10px #00ffe7;
+      box-shadow: 0 0 10px var(--fg);
       margin: 1rem;
     }
     @media (max-width: 600px) {
@@ -63,22 +94,40 @@
     }
     .filter-section, .history {
       padding: 1rem;
-      background: #111a2e;
+      background: var(--stat-bg);
       margin: 1rem;
       border-radius: 10px;
-      box-shadow: 0 0 10px #00ffe7;
+      box-shadow: 0 0 10px var(--fg);
     }
     input[type="date"] {
       font-family: 'Orbitron';
       padding: 0.5rem;
-      background: #0d121f;
-      border: 1px solid #00ffe7;
-      color: #00ffe7;
+      background: var(--bg);
+      border: 1px solid var(--fg);
+      color: var(--fg);
     }
   </style>
 </head>
 <body>
   <header>🚘 Smart Car Dashboard</header>
+  <div class="top-controls">
+    <div>
+      <button onclick="toggleTheme()">🌙/☀️ Theme</button>
+      <select id="tileSelector" onchange="switchTile()">
+        <option value="osm">🗺️ Roadmap</option>
+        <option value="sat">🌍 Satellite</option>
+      </select>
+    </div>
+    <div>
+      <span>🔋 Battery: <span id="battery">--%</span></span> |
+      <span>📡 GPS: <span id="gpsFix">--</span></span>
+    </div>
+    <div>
+      <button onclick="exportExcel()">📄 Export Excel</button>
+      <button onclick="exportPDF()">📄 Export PDF</button>
+    </div>
+  </div>
+
   <div id="map"></div>
 
   <div class="filter-section">
@@ -101,6 +150,7 @@
   </div>
 
   <script>
+    // Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA",
       authDomain: "gpstracker-9be3a.firebaseapp.com",
@@ -111,17 +161,34 @@
       appId: "xxx"
     };
     firebase.initializeApp(firebaseConfig);
-
     const liveDb = firebase.database().ref("device1/latest");
 
+    // Theme toggle
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute("data-theme");
+      document.documentElement.setAttribute("data-theme", current === "light" ? "dark" : "light");
+    }
+
+    // Map setup
     const map = L.map('map').setView([20.59, 78.96], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+    const tileLayers = {
+      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }),
+      sat: L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        subdomains: ['mt0', 'mt1', 'mt2'], maxZoom: 18
+      })
+    };
+    tileLayers.osm.addTo(map);
+    function switchTile() {
+      const val = document.getElementById("tileSelector").value;
+      Object.values(tileLayers).forEach(layer => map.removeLayer(layer));
+      tileLayers[val].addTo(map);
+    }
 
     let marker, startMarker, endMarker;
     const trail = L.polyline([], { color: '#00ffe7', weight: 4 }).addTo(map);
     let lastLatLng = null, totalDistance = 0;
-
     const speedData = [], timeData = [];
+
     const speedChart = new Chart(document.getElementById("speedChart"), {
       type: 'line',
       data: {
@@ -137,24 +204,23 @@
       options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
 
+    // Realtime updates
     liveDb.on('value', snap => {
       const d = snap.val();
       if (!d || !d.lat || !d.lon) return;
 
       const latlng = [d.lat, d.lon];
-
       if (!marker) {
         marker = L.marker(latlng).addTo(map);
-        startMarker = L.marker(latlng, { title: "Start", icon: L.icon({ iconUrl: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png' }) }).addTo(map);
+        startMarker = L.marker(latlng, { icon: L.icon({ iconUrl: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png' }) }).addTo(map);
       } else {
         marker.setLatLng(latlng);
         if (endMarker) map.removeLayer(endMarker);
-        endMarker = L.marker(latlng, { title: "Current", icon: L.icon({ iconUrl: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }) }).addTo(map);
+        endMarker = L.marker(latlng, { icon: L.icon({ iconUrl: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }) }).addTo(map);
       }
 
       trail.addLatLng(latlng);
       map.setView(latlng);
-
       if (lastLatLng) {
         const dist = map.distance(lastLatLng, latlng) / 1000;
         totalDistance += dist;
@@ -165,12 +231,13 @@
       document.getElementById("rpm").innerText = ((d.speed || 0) * 90).toFixed(0);
       document.getElementById("trip").innerText = totalDistance.toFixed(2) + " km";
       document.getElementById("time").innerText = d.time || "--:--:--";
+      document.getElementById("gpsFix").innerText = d.gpsFix ? "✅" : "❌";
+      document.getElementById("battery").innerText = d.battery ? `${d.battery}%` : "--%";
 
       speedData.push(d.speed || 0);
       timeData.push(new Date().toLocaleTimeString());
       if (speedData.length > 30) {
-        speedData.shift();
-        timeData.shift();
+        speedData.shift(); timeData.shift();
       }
       speedChart.update();
     });
@@ -183,7 +250,7 @@
       historyRef.once("value", snapshot => {
         const list = document.getElementById("log");
         list.innerHTML = "";
-        if (!snapshot.exists()) return list.innerHTML = "<li>No data found for this date</li>";
+        if (!snapshot.exists()) return list.innerHTML = "<li>No data found</li>";
         snapshot.forEach(child => {
           const d = child.val();
           const li = document.createElement("li");
@@ -191,6 +258,31 @@
           list.appendChild(li);
         });
       });
+    }
+
+    function exportExcel() {
+      const rows = [["Time", "Lat", "Lon", "Speed"]];
+      document.querySelectorAll("#log li").forEach(li => {
+        const parts = li.innerText.split(" - ");
+        const coords = parts[1].match(/Lat: (.*), Lon: (.*), Speed: (.*) km\/h/);
+        rows.push([parts[0], coords[1], coords[2], coords[3]]);
+      });
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, "TripLog");
+      XLSX.writeFile(wb, "trip_log.xlsx");
+    }
+
+    function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text("Trip Log", 10, 10);
+      let y = 20;
+      document.querySelectorAll("#log li").forEach(li => {
+        doc.text(li.innerText, 10, y);
+        y += 8;
+      });
+      doc.save("trip_log.pdf");
     }
   </script>
 </body>
