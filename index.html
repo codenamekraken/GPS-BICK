@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🚗 Smart Car Dashboard</title>
+  <title>🚘 Real-Time GPS Tracker</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -11,20 +11,18 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
-    * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: 'Orbitron', sans-serif;
-      background: linear-gradient(to bottom, #050b18, #0a0f1a);
+      background: #0a0f1a;
       color: #00ffe7;
     }
     header {
       padding: 1rem;
       text-align: center;
-      font-size: 2rem;
+      font-size: 1.8rem;
       background: #020613;
       border-bottom: 2px solid #00ffe7;
-      box-shadow: 0 0 15px #00ffe7;
     }
     #map {
       height: 350px;
@@ -40,13 +38,9 @@
     .stat {
       background: #111a2e;
       padding: 1rem;
-      border-radius: 15px;
-      box-shadow: 0 0 15px #00ffe7;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #00ffe7;
       text-align: center;
-      transition: 0.3s ease-in-out;
-    }
-    .stat:hover {
-      transform: scale(1.05);
     }
     .stat h2 {
       margin: 0 0 10px;
@@ -54,64 +48,28 @@
       color: #7fffd4;
     }
     .stat p {
-      font-size: 1.6rem;
+      font-size: 1.5rem;
     }
     canvas {
       background: #0d121f;
-      border-radius: 15px;
+      border-radius: 10px;
       padding: 1rem;
-      box-shadow: 0 0 15px #00ffe7;
+      box-shadow: 0 0 10px #00ffe7;
       margin: 1rem;
-    }
-    .toolbar {
-      text-align: center;
-      padding: 0.5rem;
-    }
-    button {
-      background: #00ffe7;
-      color: #000;
-      border: none;
-      padding: 0.5rem 1rem;
-      margin: 0.3rem;
-      border-radius: 5px;
-      font-family: 'Orbitron', sans-serif;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    .light-mode {
-      background: #f4f4f4;
-      color: #111;
-    }
-    .light-mode header {
-      background: #ddd;
-      color: #000;
-      border-color: #222;
-    }
-    .light-mode .stat {
-      background: #fff;
-      color: #111;
-      box-shadow: 0 0 10px #aaa;
     }
   </style>
 </head>
 <body>
-  <header>🚗 Smart Car Dashboard</header>
+  <header>🚘 Real-Time GPS Dashboard</header>
   <div id="map"></div>
-  <div class="toolbar">
-    <button onclick="toggleTheme()">Toggle Theme</button>
-    <button onclick="exportCSV()">Export CSV</button>
-  </div>
+
   <div class="stats">
     <div class="stat"><h2>Speed</h2><p id="speed">0 km/h</p></div>
     <div class="stat"><h2>RPM</h2><p id="rpm">0</p></div>
     <div class="stat"><h2>Trip Distance</h2><p id="trip">0 km</p></div>
     <div class="stat"><h2>Time</h2><p id="time">--:--:--</p></div>
-    <div class="stat"><h2>Battery</h2><p id="voltage">-- V</p></div>
-    <div class="stat"><h2>WiFi</h2><p id="wifi">-- dBm</p></div>
-    <div class="stat"><h2>Status</h2><p id="status">Offline</p></div>
-    <div class="stat"><h2>Max Speed</h2><p id="maxSpeed">0 km/h</p></div>
-    <div class="stat"><h2>Avg Speed</h2><p id="avgSpeed">0 km/h</p></div>
   </div>
+
   <canvas id="speedChart" height="150"></canvas>
 
   <script>
@@ -120,6 +78,9 @@
       authDomain: "gpstracker-9be3a.firebaseapp.com",
       databaseURL: "https://gpstracker-9be3a-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "gpstracker-9be3a",
+      storageBucket: "gpstracker-9be3a.appspot.com",
+      messagingSenderId: "xxx",
+      appId: "xxx"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database().ref("locations").limitToLast(1);
@@ -128,9 +89,8 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
     }).addTo(map);
-
     let marker, trail = L.polyline([], { color: '#00ffe7', weight: 4 }).addTo(map);
-    let lastLatLng = null, totalDistance = 0, lastUpdate = Date.now();
+    let lastLatLng = null, totalDistance = 0;
 
     const speedData = [], timeData = [];
     const speedChart = new Chart(document.getElementById("speedChart"), {
@@ -148,21 +108,13 @@
       options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
 
-    setInterval(() => {
-      const now = Date.now();
-      const diff = (now - lastUpdate) / 1000;
-      document.getElementById("status").innerText = diff < 10 ? "Online" : "Offline";
-    }, 3000);
-
     db.on('child_added', snap => {
-      lastUpdate = Date.now();
       const d = snap.val();
       if (!d || !d.lat || !d.lon) return;
 
       const latlng = [d.lat, d.lon];
       if (!marker) {
         marker = L.marker(latlng).addTo(map);
-        L.circle(latlng, { radius: 50, color: 'red', fillOpacity: 0.1 }).addTo(map);
       } else {
         marker.setLatLng(latlng);
       }
@@ -179,8 +131,6 @@
       document.getElementById("rpm").innerText = ((d.speed || 0) * 90).toFixed(0);
       document.getElementById("trip").innerText = totalDistance.toFixed(2) + " km";
       document.getElementById("time").innerText = d.time || "--:--:--";
-      document.getElementById("voltage").innerText = (d.voltage || 0).toFixed(1) + " V";
-      document.getElementById("wifi").innerText = d.wifi || "--";
 
       speedData.push(d.speed || 0);
       timeData.push(new Date().toLocaleTimeString());
@@ -189,29 +139,7 @@
         timeData.shift();
       }
       speedChart.update();
-
-      const max = Math.max(...speedData);
-      const avg = speedData.reduce((a, b) => a + b, 0) / speedData.length;
-      document.getElementById("maxSpeed").innerText = max.toFixed(1) + " km/h";
-      document.getElementById("avgSpeed").innerText = avg.toFixed(1) + " km/h";
     });
-
-    function toggleTheme() {
-      document.body.classList.toggle('light-mode');
-    }
-
-    function exportCSV() {
-      let csv = "Time,Lat,Lon,Speed\n";
-      trail.getLatLngs().forEach((p, i) => {
-        csv += `${timeData[i] || ''},${p.lat},${p.lng},${speedData[i] || ''}\n`;
-      });
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "trip.csv";
-      a.click();
-    }
   </script>
 </body>
 </html>
