@@ -1,124 +1,76 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🚗 Car HUD GPS Dashboard</title>
+  <title>🚘 Real-Time GPS Tracker</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap');
-    :root {
-      --bg: #0c0c1c;
-      --text: #00ffcc;
-      --accent: #00f7ff;
-      --hud-bg: rgba(0, 0, 0, 0.7);
-      --map-outline: #00ffff;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
     body {
       margin: 0;
-      background: var(--bg);
-      color: var(--text);
       font-family: 'Orbitron', sans-serif;
+      background: #0a0f1a;
+      color: #00ffe7;
     }
     header {
+      padding: 1rem;
       text-align: center;
-      padding: 0.5rem;
-      font-size: 1.5rem;
-      color: var(--accent);
-      background-color: #111;
-      border-bottom: 2px solid var(--accent);
+      font-size: 1.8rem;
+      background: #020613;
+      border-bottom: 2px solid #00ffe7;
     }
     #map {
-      height: 320px;
-      filter: brightness(1.3);
-      border-bottom: 3px solid var(--accent);
+      height: 350px;
+      border-bottom: 2px solid #00ffe7;
     }
-    .side-menu {
-      position: fixed;
-      top: 60px;
-      left: 10px;
-      width: 200px;
-      background: var(--hud-bg);
-      border: 1px solid var(--accent);
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      padding: 1rem;
+      background: #0d121f;
+    }
+    .stat {
+      background: #111a2e;
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #00ffe7;
+      text-align: center;
+    }
+    .stat h2 {
+      margin: 0 0 10px;
+      font-size: 1.2rem;
+      color: #7fffd4;
+    }
+    .stat p {
+      font-size: 1.5rem;
+    }
+    canvas {
+      background: #0d121f;
       border-radius: 10px;
       padding: 1rem;
-      z-index: 999;
-      color: var(--text);
-      font-size: 0.9rem;
-    }
-    .side-menu h3 {
-      margin-top: 0;
-      font-size: 1.2rem;
-      color: var(--accent);
-    }
-    .gauges {
-      display: flex;
-      justify-content: space-around;
-      flex-wrap: wrap;
-      background: #111;
-      padding: 1rem;
-    }
-    canvas.speed-meter {
-      width: 220px;
-      height: 220px;
-    }
-    .info {
-      display: flex;
-      justify-content: space-evenly;
-      background: #111;
-      padding: 1rem;
-    }
-    .info div {
-      text-align: center;
-      flex: 1;
-    }
-    .chart {
-      padding: 1rem;
-    }
-    @media (max-width: 768px) {
-      .gauges {
-        flex-direction: column;
-        align-items: center;
-      }
-      .side-menu {
-        width: 90%;
-        left: 5%;
-      }
+      box-shadow: 0 0 10px #00ffe7;
+      margin: 1rem;
     }
   </style>
 </head>
 <body>
-  <header>
-    🚀 CAR HUD DASHBOARD
-  </header>
+  <header>🚘 Real-Time GPS Dashboard</header>
   <div id="map"></div>
-  <div class="side-menu">
-    <h3>MENU</h3>
-    <ul>
-      <li>Live Location</li>
-      <li>Speed Stats</li>
-      <li>Track Logs</li>
-      <li>Fuel Efficiency</li>
-      <li>Settings</li>
-    </ul>
+
+  <div class="stats">
+    <div class="stat"><h2>Speed</h2><p id="speed">0 km/h</p></div>
+    <div class="stat"><h2>RPM</h2><p id="rpm">0</p></div>
+    <div class="stat"><h2>Trip Distance</h2><p id="trip">0 km</p></div>
+    <div class="stat"><h2>Time</h2><p id="time">--:--:--</p></div>
   </div>
-  <div class="gauges">
-    <canvas id="topSpeedMeter" class="speed-meter"></canvas>
-    <canvas id="avgSpeedMeter" class="speed-meter"></canvas>
-  </div>
-  <div class="info">
-    <div id="start-point">Start: --</div>
-    <div id="end-point">End: --</div>
-    <div id="distance">Distance: 0 km</div>
-  </div>
-  <div class="chart">
-    <canvas id="speedChart"></canvas>
-  </div>
+
+  <canvas id="speedChart" height="150"></canvas>
 
   <script>
     const firebaseConfig = {
@@ -131,70 +83,40 @@
       appId: "xxx"
     };
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database().ref("trackers/device1");
+    const db = firebase.database().ref("locations").limitToLast(1);
 
-    const map = L.map('map').setView([20.5937, 78.9629], 15);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 20
+    const map = L.map('map').setView([20.59, 78.96], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
     }).addTo(map);
+    let marker, trail = L.polyline([], { color: '#00ffe7', weight: 4 }).addTo(map);
+    let lastLatLng = null, totalDistance = 0;
 
-    let marker, startMarker, endMarker;
-    const trail = L.polyline([], { color: '#00ffff', weight: 5 }).addTo(map);
-    let totalDistance = 0, topSpeed = 0, totalSpeed = 0, count = 0, lastLatLng;
-    const speedData = [], speedTime = [];
-
+    const speedData = [], timeData = [];
     const speedChart = new Chart(document.getElementById("speedChart"), {
       type: 'line',
       data: {
-        labels: speedTime,
+        labels: timeData,
         datasets: [{
           label: 'Speed (km/h)',
           data: speedData,
-          borderColor: 'cyan',
+          borderColor: '#00ffe7',
           backgroundColor: 'transparent',
-          tension: 0.3
+          tension: 0.2
         }]
       },
       options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
 
-    function drawGauge(canvasId, value, maxVal) {
-      const canvas = document.getElementById(canvasId);
-      const ctx = canvas.getContext("2d");
-      const w = canvas.width = canvas.offsetWidth;
-      const h = canvas.height = canvas.offsetHeight;
-      const cx = w / 2, cy = h / 2, r = Math.min(cx, cy) - 10;
+    db.on('child_added', snap => {
+      const d = snap.val();
+      if (!d || !d.lat || !d.lon) return;
 
-      ctx.clearRect(0, 0, w, h);
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, Math.PI, 0);
-      ctx.strokeStyle = '#222';
-      ctx.lineWidth = 12;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, Math.PI, Math.PI + (Math.PI * value / maxVal));
-      ctx.strokeStyle = '#00f7ff';
-      ctx.lineWidth = 12;
-      ctx.stroke();
-
-      ctx.fillStyle = 'white';
-      ctx.font = "bold 20px Orbitron";
-      ctx.textAlign = "center";
-      ctx.fillText(value.toFixed(1) + " km/h", cx, cy + 10);
-    }
-
-    function update(lat, lon, speed) {
-      const latlng = [lat, lon];
+      const latlng = [d.lat, d.lon];
       if (!marker) {
         marker = L.marker(latlng).addTo(map);
-        startMarker = L.marker(latlng).addTo(map);
-        document.getElementById('start-point').innerText = `Start: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
       } else {
         marker.setLatLng(latlng);
-        if (endMarker) map.removeLayer(endMarker);
-        endMarker = L.marker(latlng).addTo(map);
-        document.getElementById('end-point').innerText = `End: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
       }
       trail.addLatLng(latlng);
       map.setView(latlng);
@@ -205,27 +127,18 @@
       }
       lastLatLng = latlng;
 
-      totalSpeed += speed;
-      topSpeed = Math.max(topSpeed, speed);
-      count++;
-      speedData.push(speed);
-      speedTime.push(new Date().toLocaleTimeString());
-      if (speedData.length > 25) {
+      document.getElementById("speed").innerText = (d.speed || 0).toFixed(1) + " km/h";
+      document.getElementById("rpm").innerText = ((d.speed || 0) * 90).toFixed(0);
+      document.getElementById("trip").innerText = totalDistance.toFixed(2) + " km";
+      document.getElementById("time").innerText = d.time || "--:--:--";
+
+      speedData.push(d.speed || 0);
+      timeData.push(new Date().toLocaleTimeString());
+      if (speedData.length > 30) {
         speedData.shift();
-        speedTime.shift();
+        timeData.shift();
       }
       speedChart.update();
-
-      const avg = totalSpeed / count;
-      drawGauge("topSpeedMeter", topSpeed, 120);
-      drawGauge("avgSpeedMeter", avg, 120);
-      document.getElementById('distance').innerText = `Distance: ${totalDistance.toFixed(2)} km`;
-    }
-
-    db.on('value', snap => {
-      const d = snap.val();
-      if (!d || !d.lat || !d.lon) return;
-      update(d.lat, d.lon, d.speed || 0);
     });
   </script>
 </body>
