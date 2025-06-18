@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🚘 Real-Time GPS Tracker</title>
+  <title>🚘 Smart Car Dashboard</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -57,11 +57,34 @@
       box-shadow: 0 0 10px #00ffe7;
       margin: 1rem;
     }
+    @media (max-width: 600px) {
+      .stats { grid-template-columns: 1fr; }
+      canvas { width: 90vw; margin: auto; }
+    }
+    .filter-section, .history {
+      padding: 1rem;
+      background: #111a2e;
+      margin: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #00ffe7;
+    }
+    input[type="date"] {
+      font-family: 'Orbitron';
+      padding: 0.5rem;
+      background: #0d121f;
+      border: 1px solid #00ffe7;
+      color: #00ffe7;
+    }
   </style>
 </head>
 <body>
-  <header>🚘 Real-Time GPS Dashboard</header>
+  <header>🚘 Smart Car Dashboard</header>
   <div id="map"></div>
+
+  <div class="filter-section">
+    <label>Select Date: <input type="date" id="tripDate" /></label>
+    <button onclick="loadHistory()">Load Trip</button>
+  </div>
 
   <div class="stats">
     <div class="stat"><h2>Speed</h2><p id="speed">0 km/h</p></div>
@@ -71,6 +94,11 @@
   </div>
 
   <canvas id="speedChart" height="150"></canvas>
+
+  <div class="history">
+    <h2>📜 Trip History Log</h2>
+    <ul id="log"></ul>
+  </div>
 
   <script>
     const firebaseConfig = {
@@ -83,13 +111,14 @@
       appId: "xxx"
     };
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database().ref("locations").limitToLast(1);
+
+    const liveDb = firebase.database().ref("device1/latest");
 
     const map = L.map('map').setView([20.59, 78.96], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-    }).addTo(map);
-    let marker, trail = L.polyline([], { color: '#00ffe7', weight: 4 }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+
+    let marker, startMarker, endMarker;
+    const trail = L.polyline([], { color: '#00ffe7', weight: 4 }).addTo(map);
     let lastLatLng = null, totalDistance = 0;
 
     const speedData = [], timeData = [];
@@ -108,16 +137,21 @@
       options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
 
-    db.on('child_added', snap => {
+    liveDb.on('value', snap => {
       const d = snap.val();
       if (!d || !d.lat || !d.lon) return;
 
       const latlng = [d.lat, d.lon];
+
       if (!marker) {
         marker = L.marker(latlng).addTo(map);
+        startMarker = L.marker(latlng, { title: "Start", icon: L.icon({ iconUrl: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png' }) }).addTo(map);
       } else {
         marker.setLatLng(latlng);
+        if (endMarker) map.removeLayer(endMarker);
+        endMarker = L.marker(latlng, { title: "Current", icon: L.icon({ iconUrl: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }) }).addTo(map);
       }
+
       trail.addLatLng(latlng);
       map.setView(latlng);
 
@@ -140,6 +174,24 @@
       }
       speedChart.update();
     });
+
+    function loadHistory() {
+      const selected = document.getElementById("tripDate").value;
+      if (!selected) return;
+      const historyRef = firebase.database().ref("history/" + selected);
+      document.getElementById("log").innerHTML = "Loading...";
+      historyRef.once("value", snapshot => {
+        const list = document.getElementById("log");
+        list.innerHTML = "";
+        if (!snapshot.exists()) return list.innerHTML = "<li>No data found for this date</li>";
+        snapshot.forEach(child => {
+          const d = child.val();
+          const li = document.createElement("li");
+          li.innerText = `${d.time || '--:--'} - Lat: ${d.lat}, Lon: ${d.lon}, Speed: ${d.speed} km/h`;
+          list.appendChild(li);
+        });
+      });
+    }
   </script>
 </body>
 </html>
