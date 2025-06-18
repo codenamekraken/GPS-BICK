@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
   <style>
@@ -16,6 +18,11 @@
       font-family: 'Orbitron', sans-serif;
       background: #0a0f1a;
       color: #00ffe7;
+      transition: background 0.3s, color 0.3s;
+    }
+    body.light {
+      background: #f5f5f5;
+      color: #111;
     }
     header {
       padding: 1rem;
@@ -24,9 +31,35 @@
       background: #020613;
       border-bottom: 2px solid #00ffe7;
     }
+    body.light header {
+      background: #e0e0e0;
+      border-color: #222;
+    }
     #map {
       height: 350px;
       border-bottom: 2px solid #00ffe7;
+    }
+    .top-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      background: #111a2e;
+    }
+    .top-controls button {
+      background: transparent;
+      border: 1px solid #00ffe7;
+      color: inherit;
+      padding: 0.3rem 0.8rem;
+      font-family: 'Orbitron';
+      margin-left: 0.5rem;
+      cursor: pointer;
+    }
+    .top-controls span {
+      margin: 0 0.5rem;
+    }
+    .stats, .filter-section, .history {
+      transition: background 0.3s, color 0.3s;
     }
     .stats {
       display: grid;
@@ -79,27 +112,34 @@
 </head>
 <body>
   <header>🚘 Smart Car Dashboard</header>
+  <div class="top-controls">
+    <div>
+      <button onclick="toggleTheme()">🌙/☀️</button>
+      <button onclick="switchMapLayer()">🗺️</button>
+    </div>
+    <div>
+      <span id="batteryStatus">🔋 Battery: --%</span>
+      <span id="gpsStatus">📡 GPS: --</span>
+      <button onclick="exportToPDF()">📄 PDF</button>
+      <button onclick="exportToExcel()">📄 Excel</button>
+    </div>
+  </div>
   <div id="map"></div>
-
   <div class="filter-section">
     <label>Select Date: <input type="date" id="tripDate" /></label>
     <button onclick="loadHistory()">Load Trip</button>
   </div>
-
   <div class="stats">
     <div class="stat"><h2>Speed</h2><p id="speed">0 km/h</p></div>
     <div class="stat"><h2>RPM</h2><p id="rpm">0</p></div>
     <div class="stat"><h2>Trip Distance</h2><p id="trip">0 km</p></div>
     <div class="stat"><h2>Time</h2><p id="time">--:--:--</p></div>
   </div>
-
   <canvas id="speedChart" height="150"></canvas>
-
   <div class="history">
     <h2>📜 Trip History Log</h2>
     <ul id="log"></ul>
   </div>
-
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyBIhBp0RUkoEoSISBBpqXq6xpHPDH_8PTA",
@@ -111,11 +151,53 @@
       appId: "xxx"
     };
     firebase.initializeApp(firebaseConfig);
-
-    const liveDb = firebase.database().ref("device1/latest");
+    const liveDb = firebase.database().ref("locations").limitToLast(1);
 
     const map = L.map('map').setView([20.59, 78.96], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+    let osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+    let satLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+      attribution: '© Google'
+    });
+    osmLayer.addTo(map);
+
+    function switchMapLayer() {
+      if (map.hasLayer(osmLayer)) {
+        map.removeLayer(osmLayer);
+        map.addLayer(satLayer);
+      } else {
+        map.removeLayer(satLayer);
+        map.addLayer(osmLayer);
+      }
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle('light');
+    }
+
+    function exportToPDF() {
+      const doc = new jspdf.jsPDF();
+      doc.text("Smart Car Dashboard Report", 10, 10);
+      doc.text(document.getElementById("speed").innerText, 10, 20);
+      doc.text(document.getElementById("trip").innerText, 10, 30);
+      doc.save("trip_report.pdf");
+    }
+
+    function exportToExcel() {
+      const wb = XLSX.utils.book_new();
+      const ws_data = [
+        ["Speed", "RPM", "Trip Distance", "Time"],
+        [
+          document.getElementById("speed").innerText,
+          document.getElementById("rpm").innerText,
+          document.getElementById("trip").innerText,
+          document.getElementById("time").innerText
+        ]
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Trip");
+      XLSX.writeFile(wb, "trip_data.xlsx");
+    }
 
     let marker, startMarker, endMarker;
     const trail = L.polyline([], { color: '#00ffe7', weight: 4 }).addTo(map);
@@ -137,10 +219,9 @@
       options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
 
-    liveDb.on('value', snap => {
+    liveDb.on('child_added', snap => {
       const d = snap.val();
       if (!d || !d.lat || !d.lon) return;
-
       const latlng = [d.lat, d.lon];
 
       if (!marker) {
@@ -165,6 +246,7 @@
       document.getElementById("rpm").innerText = ((d.speed || 0) * 90).toFixed(0);
       document.getElementById("trip").innerText = totalDistance.toFixed(2) + " km";
       document.getElementById("time").innerText = d.time || "--:--:--";
+      document.getElementById("gpsStatus").innerText = `📡 GPS: ${d.satellites || 'N/A'} sats`;
 
       speedData.push(d.speed || 0);
       timeData.push(new Date().toLocaleTimeString());
